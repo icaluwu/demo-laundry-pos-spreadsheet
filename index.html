@@ -1304,8 +1304,8 @@
 
       <!-- ══ PAGE: Data Sync (Upload & Download) ══ -->
       <section id="page-data-sync" class="page">
-        <div class="glass-card p-6 mb-6">
-          <div class="flex items-center gap-3 mb-2">
+        <div class="glass-card p-6 mb-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div class="flex items-center gap-3">
             <div style="width:36px;height:36px;background:rgba(16,185,129,.15);border-radius:10px;display:flex;align-items:center;justify-content:center;">
               <i data-lucide="folder-sync" style="width:18px;height:18px;color:#34d399;"></i>
             </div>
@@ -1314,6 +1314,9 @@
               <p class="text-xs text-slate-500">Sinkronisasi data sistem dan ekspor laporan</p>
             </div>
           </div>
+          <button onclick="fetchDataFromSheets()" id="btn-sync-data" class="flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-white transition-all shadow-lg hover:scale-105" style="background:linear-gradient(135deg,#1b6ff5,#1459e1);">
+            <i data-lucide="refresh-cw" style="width:16px;height:16px;" id="icon-sync"></i> Tarik Data (Sync)
+          </button>
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -2883,6 +2886,105 @@
         console.log(`✅ Terkirim: ${action} → ${sheetName}`);
       } catch (err) {
         console.warn(`⚠️ Gagal sync ${sheetName}:`, err.message);
+      }
+    }
+
+    async function fetchDataFromSheets() {
+      const btn = document.getElementById('btn-sync-data');
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i data-lucide="loader-2" style="width:16px;height:16px;" class="animate-spin"></i> Sedang Menyinkronkan...';
+        lucide.createIcons();
+      }
+
+      try {
+        const response = await fetch(APPS_SCRIPT_URL + '?action=readAll', { method: 'GET' });
+        const result = await response.json();
+
+        if (result.status === 'success' && result.data) {
+          const d = result.data;
+          
+          if (d['Orders'] || d['Data_Transaksi']) {
+            const rows = d['Orders'] || d['Data_Transaksi'];
+            transactions = rows.map(r => ({
+              _id: r._id || genId(), id: r.notaId || r.id || '-', customer: r.customer, phone: r.phone,
+              layanan: r.layanan, berat: parseFloat(r.berat) || 0, total: parseFloat(r.total) || 0,
+              status: r.status, statusBayar: r.statusBayar, metodeBayar: r.metodeBayar,
+              time: r.time || (r.timestamp ? r.timestamp.split('T')[1].substring(0, 5) : ''),
+              tanggal: r.tanggal || (r.timestamp ? r.timestamp.split('T')[0] : '')
+            }));
+            trxCounter = transactions.length;
+          }
+          if (d['Customer'] || d['Data_Customer']) {
+            const rows = d['Customer'] || d['Data_Customer'];
+            customerList = rows.map(r => ({
+              _id: r._id || genId(), nama: r.nama, phone: r.phone, alamat: r.alamat, tipe: r.tipe || 'Baru', totalOrder: parseInt(r.totalOrder) || 0
+            }));
+          }
+          if (d['Master_Layanan_Harga']) {
+            masterLayananList = d['Master_Layanan_Harga'].map(r => ({
+              _id: r._id || genId(), namaLayanan: r.namaLayanan, harga: parseFloat(r.hargaPerKg || r.harga) || 0,
+              satuan: r.satuan || 'kg', deskripsi: r.deskripsi || '', aktif: r.aktif !== false && r.aktif !== 'FALSE'
+            }));
+          }
+          if (d['Deposit'] || d['Data_Deposit']) {
+            const rows = d['Deposit'] || d['Data_Deposit'];
+            depositList = rows.map(r => ({
+              _id: r._id || genId(), customer: r.customer, phone: r.phone, jumlah: parseFloat(r.jumlah) || 0,
+              saldoSebelum: parseFloat(r.saldoSebelum) || 0, saldoSesudah: parseFloat(r.saldoSesudah) || 0,
+              kasir: r.kasir || 'Kasir', time: r.time || '', tanggal: r.tanggal || ''
+            }));
+          }
+          if (d['Pengeluaran'] || d['Pengeluaran_Outlet']) {
+            const rows = d['Pengeluaran'] || d['Pengeluaran_Outlet'];
+            pengeluaranList = rows.map(r => ({
+              _id: r._id || genId(), nama: r.keterangan || r.nama, kategori: r.kategori || 'Lainnya',
+              jumlah: parseFloat(r.jumlah) || 0, time: r.time || '', tanggal: r.tanggal || ''
+            }));
+          }
+          if (d['Pengeluaran_Management']) {
+            pengeluaranMgmtList = d['Pengeluaran_Management'].map(r => ({
+              _id: r._id || genId(), keterangan: r.keterangan, kategori: r.kategori || 'Lainnya',
+              sumberDana: r.sumberDana || 'Kas Utama', catatan: r.catatan || '',
+              jumlah: parseFloat(r.jumlah) || 0, time: r.time || '', tanggal: r.tanggal || ''
+            }));
+          }
+          if (d['Antar_Jemput']) {
+            antarJemputList = d['Antar_Jemput'].map(r => ({
+              _id: r._id || genId(), trxId: r.trxId, tipe: r.tipe, kurir: r.kurir,
+              biaya: parseFloat(r.biaya) || 0, status: r.status || 'Menunggu',
+              time: r.time || '', tanggal: r.tanggal || ''
+            }));
+          }
+          if (d['Data_Karyawan']) {
+            karyawanList = d['Data_Karyawan'].map(r => ({
+              _id: r._id || genId(), nama: r.nama, phone: r.phone, posisi: r.posisi,
+              gajiPokok: parseFloat(r.gajiPokok) || 0, status: r.status || 'Aktif'
+            }));
+          }
+          if (d['Laporan_Kerja_Karyawan']) {
+            laporanKerjaList = d['Laporan_Kerja_Karyawan'].map(r => ({
+              _id: r._id || genId(), namaKaryawan: r.namaKaryawan, jamMasuk: r.jamMasuk,
+              jamKeluar: r.jamKeluar, totalJam: parseFloat(r.totalJam) || 0, tanggal: r.tanggal || ''
+            }));
+          }
+
+          renderAllModules();
+          computeNettCash();
+          renderLaporan();
+          showToast('✅ Sinkronisasi Data Berhasil!');
+        } else {
+          showToast('⚠️ Gagal sinkronisasi: ' + (result.message || 'Respons tidak dikenali'), 'error');
+        }
+      } catch (err) {
+        showToast('⚠️ Error: ' + err.message, 'warning');
+        console.error(err);
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = '<i data-lucide="refresh-cw" style="width:16px;height:16px;" id="icon-sync"></i> Tarik Data (Sync)';
+          lucide.createIcons();
+        }
       }
     }
 
