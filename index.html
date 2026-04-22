@@ -2962,70 +2962,126 @@
 
         if (result.status === 'success' && result.data) {
           const d = result.data;
+          
+          const getVal = (obj, ...keys) => {
+            const objKeys = Object.keys(obj);
+            for (let i = 0; i < keys.length; i++) {
+              const searchKey = keys[i].toLowerCase().replace(/_/g, '');
+              const matchedKey = objKeys.find(k => k.toLowerCase().replace(/_/g, '') === searchKey);
+              if (matchedKey && obj[matchedKey] !== undefined && obj[matchedKey] !== '') {
+                return obj[matchedKey];
+              }
+            }
+            return '';
+          };
+
+          const parseTs = (r) => {
+            let tDate = getVal(r, 'tanggal', 'date');
+            let tTime = getVal(r, 'time', 'jam');
+            let ts = getVal(r, 'timestamp', 'tgl_daftar', 'waktu');
+            if(ts && (!tDate || !tTime)) {
+              const str = String(ts);
+              if(str.includes('T')) {
+                const parts = str.split('T');
+                if(!tDate) tDate = parts[0];
+                if(!tTime && parts[1]) tTime = parts[1].substring(0, 5);
+              } else if (str.includes(' ')) {
+                const parts = str.split(' ');
+                if(!tDate) {
+                  let dStr = parts[0];
+                  if(dStr.includes('/')) {
+                    const dp = dStr.split('/');
+                    if(dp.length === 3 && dp[2].length === 4) dStr = `${dp[2]}-${dp[1].padStart(2,'0')}-${dp[0].padStart(2,'0')}`;
+                  }
+                  tDate = dStr;
+                }
+                if(!tTime && parts[1]) tTime = parts[1].substring(0, 5);
+              }
+            }
+            return { date: tDate, time: tTime };
+          };
 
           if (d['Orders'] || d['Data_Transaksi']) {
             const rows = d['Orders'] || d['Data_Transaksi'];
-            transactions = rows.map(r => ({
-              _id: r._id || genId(), id: r.notaId || r.id || '-', customer: r.customer, phone: r.phone,
-              layanan: r.layanan, berat: parseFloat(r.berat) || 0, total: parseFloat(r.total) || 0,
-              status: r.status, statusBayar: r.statusBayar, metodeBayar: r.metodeBayar,
-              time: r.time || (r.timestamp ? r.timestamp.split('T')[1].substring(0, 5) : ''),
-              tanggal: r.tanggal || (r.timestamp ? r.timestamp.split('T')[0] : '')
-            }));
+            transactions = rows.map(r => {
+              const pt = parseTs(r);
+              return {
+                _id: getVal(r, '_id') || genId(), id: getVal(r, 'notaid', 'id') || '-', customer: getVal(r, 'customer', 'nama', 'pelanggan'), phone: String(getVal(r, 'phone', 'nohp')),
+                layanan: getVal(r, 'layanan', 'namalayanan'), berat: parseFloat(getVal(r, 'berat', 'qty')) || 0, total: parseFloat(getVal(r, 'total', 'tagihan')) || 0,
+                status: getVal(r, 'status'), statusBayar: getVal(r, 'statusbayar'), metodeBayar: getVal(r, 'metodebayar', 'metode'),
+                time: pt.time, tanggal: pt.date
+              };
+            });
             trxCounter = transactions.length;
           }
           if (d['Customer'] || d['Data_Customer']) {
             const rows = d['Customer'] || d['Data_Customer'];
             customerList = rows.map(r => ({
-              _id: r._id || genId(), nama: r.nama, phone: r.phone, alamat: r.alamat, tipe: r.tipe || 'Baru', totalOrder: parseInt(r.totalOrder) || 0
+              _id: getVal(r, '_id') || genId(), nama: getVal(r, 'nama', 'customer'), phone: String(getVal(r, 'phone', 'nohp')), alamat: getVal(r, 'alamat'), tipe: getVal(r, 'tipe') || 'Baru', totalOrder: parseInt(getVal(r, 'totalorder')) || 0
             }));
           }
-          if (d['Master_Layanan_Harga']) {
-            masterLayananList = d['Master_Layanan_Harga'].map(r => ({
-              _id: r._id || genId(), namaLayanan: r.namaLayanan, harga: parseFloat(r.hargaPerKg || r.harga) || 0,
-              satuan: r.satuan || 'kg', deskripsi: r.deskripsi || '', aktif: r.aktif !== false && r.aktif !== 'FALSE'
+          if (d['Master_Layanan_Harga'] || d['Layanan']) {
+            const rows = d['Master_Layanan_Harga'] || d['Layanan'];
+            masterLayananList = rows.map(r => ({
+              _id: getVal(r, '_id') || genId(), namaLayanan: getVal(r, 'namalayanan', 'nama'), harga: parseFloat(getVal(r, 'hargaperkg', 'harga')) || 0,
+              satuan: getVal(r, 'satuan') || 'kg', deskripsi: getVal(r, 'deskripsi') || '', aktif: getVal(r, 'aktif') !== false && String(getVal(r, 'aktif')).toLowerCase() !== 'false'
             }));
           }
           if (d['Deposit'] || d['Data_Deposit']) {
             const rows = d['Deposit'] || d['Data_Deposit'];
-            depositList = rows.map(r => ({
-              _id: r._id || genId(), customer: r.customer, phone: r.phone, jumlah: parseFloat(r.jumlah) || 0,
-              saldoSebelum: parseFloat(r.saldoSebelum) || 0, saldoSesudah: parseFloat(r.saldoSesudah) || 0,
-              kasir: r.kasir || 'Kasir', time: r.time || '', tanggal: r.tanggal || ''
-            }));
+            depositList = rows.map(r => {
+              const pt = parseTs(r);
+              return {
+                _id: getVal(r, '_id') || genId(), customer: getVal(r, 'customer', 'nama'), phone: String(getVal(r, 'phone', 'nohp')), jumlah: parseFloat(getVal(r, 'jumlah', 'nominal')) || 0,
+                saldoSebelum: parseFloat(getVal(r, 'saldosebelum')) || 0, saldoSesudah: parseFloat(getVal(r, 'saldosesudah')) || 0,
+                kasir: getVal(r, 'kasir') || 'Kasir', time: pt.time, tanggal: pt.date
+              };
+            });
           }
           if (d['Pengeluaran'] || d['Pengeluaran_Outlet']) {
             const rows = d['Pengeluaran'] || d['Pengeluaran_Outlet'];
-            pengeluaranList = rows.map(r => ({
-              _id: r._id || genId(), nama: r.keterangan || r.nama, kategori: r.kategori || 'Lainnya',
-              jumlah: parseFloat(r.jumlah) || 0, time: r.time || '', tanggal: r.tanggal || ''
-            }));
+            pengeluaranList = rows.map(r => {
+              const pt = parseTs(r);
+              return {
+                _id: getVal(r, '_id') || genId(), nama: getVal(r, 'keterangan', 'nama'), kategori: getVal(r, 'kategori') || 'Lainnya',
+                jumlah: parseFloat(getVal(r, 'jumlah', 'nominal')) || 0, time: pt.time, tanggal: pt.date
+              };
+            });
           }
           if (d['Pengeluaran_Management']) {
-            pengeluaranMgmtList = d['Pengeluaran_Management'].map(r => ({
-              _id: r._id || genId(), keterangan: r.keterangan, kategori: r.kategori || 'Lainnya',
-              sumberDana: r.sumberDana || 'Kas Utama', catatan: r.catatan || '',
-              jumlah: parseFloat(r.jumlah) || 0, time: r.time || '', tanggal: r.tanggal || ''
-            }));
+            pengeluaranMgmtList = d['Pengeluaran_Management'].map(r => {
+              const pt = parseTs(r);
+              return {
+                _id: getVal(r, '_id') || genId(), keterangan: getVal(r, 'keterangan', 'nama'), kategori: getVal(r, 'kategori') || 'Lainnya',
+                sumberDana: getVal(r, 'sumberdana') || 'Kas Utama', catatan: getVal(r, 'catatan') || '',
+                jumlah: parseFloat(getVal(r, 'jumlah', 'nominal')) || 0, time: pt.time, tanggal: pt.date
+              };
+            });
           }
           if (d['Antar_Jemput']) {
-            antarJemputList = d['Antar_Jemput'].map(r => ({
-              _id: r._id || genId(), trxId: r.trxId, tipe: r.tipe, kurir: r.kurir,
-              biaya: parseFloat(r.biaya) || 0, status: r.status || 'Menunggu',
-              time: r.time || '', tanggal: r.tanggal || ''
-            }));
+            antarJemputList = d['Antar_Jemput'].map(r => {
+              const pt = parseTs(r);
+              return {
+                _id: getVal(r, '_id') || genId(), trxId: getVal(r, 'trxid', 'notaid'), tipe: getVal(r, 'tipe'), kurir: getVal(r, 'kurir'),
+                biaya: parseFloat(getVal(r, 'biaya', 'ongkir')) || 0, status: getVal(r, 'status') || 'Menunggu',
+                time: pt.time, tanggal: pt.date
+              };
+            });
           }
           if (d['Data_Karyawan']) {
             karyawanList = d['Data_Karyawan'].map(r => ({
-              _id: r._id || genId(), nama: r.nama, phone: r.phone, posisi: r.posisi,
-              gajiPokok: parseFloat(r.gajiPokok) || 0, status: r.status || 'Aktif'
+              _id: getVal(r, '_id') || genId(), nama: getVal(r, 'nama'), phone: String(getVal(r, 'phone', 'nohp')), posisi: getVal(r, 'posisi', 'jabatan'),
+              gajiPokok: parseFloat(getVal(r, 'gajipokok', 'gaji')) || 0, status: getVal(r, 'status') || 'Aktif'
             }));
           }
           if (d['Laporan_Kerja_Karyawan']) {
-            laporanKerjaList = d['Laporan_Kerja_Karyawan'].map(r => ({
-              _id: r._id || genId(), namaKaryawan: r.namaKaryawan, jamMasuk: r.jamMasuk,
-              jamKeluar: r.jamKeluar, totalJam: parseFloat(r.totalJam) || 0, tanggal: r.tanggal || ''
-            }));
+            laporanKerjaList = d['Laporan_Kerja_Karyawan'].map(r => {
+              const pt = parseTs(r);
+              return {
+                _id: getVal(r, '_id') || genId(), namaKaryawan: getVal(r, 'namakaryawan', 'nama'), jamMasuk: getVal(r, 'jammasuk'),
+                jamKeluar: getVal(r, 'jamkeluar'), totalJam: parseFloat(getVal(r, 'totaljam')) || 0, tanggal: pt.date
+              };
+            });
           }
 
           renderAllModules();
